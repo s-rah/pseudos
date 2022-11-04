@@ -7,6 +7,8 @@ You will need a risc-v toolchain which you can aquire using the instruction at (
 `riscv64-unknown-elf-as`
 `riscv64-unknown-elf-ld`
 
+You will also want to consult the risc-v specifications: https://riscv.org/technical/specifications/
+
 You will also need qemu risc-v the instructions for compiling/installing
 can be found https://www.qemu.org/docs/master/system/riscv/virt.html
 
