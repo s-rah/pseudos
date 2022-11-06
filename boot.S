@@ -165,6 +165,20 @@ _start:
 	la a0, endwalkingpagetables
 	call _writeln
 
+	li t0, 0
+	_iterate_pci:
+	li a0, 0x30000000
+	add a0, a0, t0
+	ld a0, 0(a0)
+	push t0
+	call _print_hex
+	pop t0
+	li t1, 4096
+	add t0, t0, t1
+	li t1, 0x10000
+	bne t0,t1, _iterate_pci
+	#call _list_pci_devices
+
 	la t0, _example_page
 	csrw mepc,t0
 	mret
@@ -176,7 +190,7 @@ _start:
 # Inlcude all of our Paging Code...
 .include "paging.S"
 .include "uart.S"
-
+.include "pci.S"
 
 _supervisor_trap:
 	la a0, smode_trapwarning
