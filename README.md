@@ -16,9 +16,14 @@ You will also want to reference the virt.c implementation for qemu's risc-v emul
 
 `qemu-system-riscv64 -machine virt -cpu rv64 -smp 4 -m 128M -nographic -serial mon:stdio -bios none -kernel kernel.elf`
 
+# Running with a VGA graphics card (accessible via PCIe)
+
+`qemu-system-riscv64 -machine virt -cpu rv64 -smp 4 -m 8192M  -serial mon:stdio -device VGA -nographic -bios none -kernel kernel.elf`
+
 # Compiling our bootloader
 
 
 Compilation Step: `riscv64-unknown-elf-as boot.S -o boot.o`
+
 Linking Step: `riscv64-unknown-elf-ld -T kernel.lds boot.o -o kernel.elf`
 
