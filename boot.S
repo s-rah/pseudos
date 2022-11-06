@@ -1,22 +1,10 @@
 .option norvc
 
-# To save some space, a macro to push the return address
-# to the local stack
-.macro push reg
-	sd \reg, 0(sp)
-	li t0, 8
-	add sp, sp, t0
-.endm
-
-# And to pop it off again...
-.macro pop reg
-	li t0, -8
-	add sp, sp, t0
-	ld \reg, 0(sp)
-.endm
+.include "macro.S"
 
 # Here is our data section which for now
 # contains some useful strings for outputting our OS status
+
 .section .data
 welcome: .ascii  "Welcome to PseudOS\n\0"
 iamhart: .ascii  "I am HART \0"
@@ -32,6 +20,12 @@ mpp_mmode: .ascii  "MPP Mode: Machine \0"
 mpp_smode: .ascii  "MPP Mode: Supervisor \0"
 interrupts_status: .ascii  "Interrupts:\0"
 
+data_section_address: .ascii "Data: \0"
+write_uart_address: .ascii "Uart: \0"
+
+walkingpagetables: .ascii "Walking Page Tables...\0"
+endwalkingpagetables: .ascii "Walking Page Tables Complete\0"
+
 hextable: .ascii  "0123456789ABCDEF"
 
 # We use co-operative scheduling for our HARTs, for now we
@@ -46,6 +40,7 @@ _scratchpad:
 	.skip 1024,0
 
 # Allocate some stack space..
+.align 12
 _stacks:
 	.skip 8192,0
 
@@ -107,22 +102,70 @@ _start:
 
 	call _setup_satp
 
-	csrr a0, satp
+	#csrr a0, satp
+	#call _print_hex
+
+	#la a0, _example_page
+	#call _print_hex
+
+	# print out data page address
+	#la a0, data_section_address
+	#call _write_uart
+	#la a0, _data_start
+	#call _print_hex
+
+	# print out supervisor string address
+	la a0, _data_start
 	call _print_hex
 
+	# print out _write_uart address
+	#la a0, write_uart_address
+	#call _write_uart
+	#la a0, _write_uart
+	#call _print_hex
+
+	# Identity Map Data
+	la a0, _data_start
+	la a1, _data_start
+	li a2, 0x07
+	call _map_to_virtual
+
+	# Identity Map Data (F)
+	la a0, _stacks
+	la a1, _stacks
+	li a2, 0x0F
+	call _map_to_virtual
+
+	# Identity Map the Uart Ports
+	li a0, 0x10000000
+	li a1, 0x10000000
+	li a2, 0x0F
+	call _map_to_virtual
+
+	# Identity Map the Uart Functions  (F)
+	la a0, _write_uart
+	la a1, _write_uart
+	li a2, 0x0F
+	call _map_to_virtual
+
+	# Virtual Map the Example Page (F)
 	la a0, _example_page
-	call _print_hex
-
-	li a0, 0x00
 	la a1, _example_page
 	li a2, 0x0F
 	call _map_to_virtual
 
-	la a0, _page_table_start
-	ld a0, 0(a0)
-	call _print_hex
+	la a0, walkingpagetables
+	call _writeln
 
-	li t0, 0x00
+	# Print out All Page Tables
+	la a0, _page_table_start
+	li a1, 2
+	call _walk_page_tables
+
+	la a0, endwalkingpagetables
+	call _writeln
+
+	la t0, _example_page
 	csrw mepc,t0
 	mret
 
@@ -130,84 +173,10 @@ _start:
 	j _announce
 	wfi
 
-_setup_satp:
-	# Setting our satp mode to Sv39 (39-bit virtual addressing)
-	li t0, 8
-	slli t0,t0, 60
-	# Gets the Physical Page Number of the Page Table
-	la t1, _page_table_start
-	# divide the physical address of the page table by 4096
-	srai t1, t1, 12
-	# Set 44 bits of t0 to the physical page number of the root page table...
-	or t0, t0, t1
-	csrw satp, t0
-	ret
+# Inlcude all of our Paging Code...
+.include "paging.S"
+.include "uart.S"
 
-
-# For Sv39 LEVELS=3 and PTESIZE = 8
-# PAGE_SIZE = 2^12
-# va -> pa
-# va = VPN[2].VPN[1].VPN[0].Offset
-# a = physical address of the page table
-# a = satp[ppn] * PAGE_SIZE
-# for va = 0x00_0000_0000
-# pte = a + va.vpn[2]*PTESIZE i.e. just a because va.vpn[2] == 0
-# pte = first entry in the page table...
-# Add An Entry to our Page Table
-# Usage:
-# a0: Virtual Page
-# a1: Physical Page
-# a2: X/W/R Bits
-_map_to_virtual:
-	push ra
-	# given a physical page map it to a virtual page
-	# Calculate the PTE of the Virtual Address
-	# va.vpn[2]
-	srli a0, a0, 30
-	li t0, 8
-	mul a0, a0, t0
-	# a0 is now va.vpn[2] * 8
-
-	# _page_table_start = satp.ppn * 4096
-	la t0, _page_table_start
-	add a0, t0, a0
-
-	# a0 now contains the physical address of the PTE for level 2 of the page tree
-	push a0
-	push a1
-	push a2
-	call _zalloc
-	mv a4, a0
-	pop a2
-	pop a1
-	pop a0
-
-	srli a5, a4, 2
-	li t0, 1
-	or a5, a5, t0
-	sd a5, 0(a0)
-
-	push a0
-	push a1
-	push a2
-	push a4
-	call _zalloc
-	mv a5, a0
-	pop a4
-	pop a2
-	pop a1
-	pop a0
-
-	srli a6, a5, 2
-	li t0, 1
-	or a6, a6, t0
-	sd a6, 0(a4)
-
-	srli a1, a1, 2
-	or a1, a1, a2
-	sd a1, 0(a5)
-	pop ra
-	ret
 
 _supervisor_trap:
 	la a0, smode_trapwarning
@@ -284,60 +253,7 @@ _sanity_check_end:
 	pop ra
 	ret
 
-# writeln is a function that will print out something followed
-# by a new line...
-# a0 should contain the address of a string to print
-# writeln will then write this string to the serial UART device
-# followed by a newline
-_writeln:
-	push ra
-	call _write_uart
-	la a0, newline
-	call _write_uart
-	pop ra
-	ret
 
-# Ensure that UART is a good state accepting 8bit values..
-_setup_uart:
-	# Diable Interupts on the UART
-	li t1, 0x10000001
-	sb x0, 0(t1)
-	# Write out to the UART Line Control Register at UART+3
-	li t1, 0x10000003
-	li t2, 0x03 # Set the output to 8 bits
-	ret
-
-_write_uart_char:
-	push ra
-	li t1, 0x10000000
-	lb t2, 0(a0)
-	sb t2, 0(t1)
-	pop ra
-	ret
-
-# Write a string to UART
-# a0 should contain a pointer to the string we want to print...
-_write_uart:
-	push ra
-_write_uart_loop:
-	# check that UART is free...
-	li t1, 0x10000005
-	lb t2, 0(t1)
-	li t3, 0x20
-	and t2, t3, t1
-	beqz t1, _write_uart_loop
-	li t1, 0x10000000
-	lb t2, 0(a0)
-	beqz t2, _write_uart_end
-	sb t2, 0(t1)
-	li t2, 1
-	add a0,t2,a0
-	# loop until null...
-	j _write_uart_loop
-
-_write_uart_end:
-	pop ra
-	ret
 
 _debug_misa:
 	push ra
@@ -469,8 +385,8 @@ _print_hex_loop:
 	pop ra
 	ret
 
-# a0 = pages to alloc
-_zalloc:
+# TODO: a0 = pages to alloc
+_kalloc:
 	la a1, _heap_counter
 	ld t0, 0(a1)
 
@@ -487,7 +403,11 @@ _zalloc:
 
 .align 12
 _example_page:
-	ecall
+	la a0, supervisormodeentry
+	call _write_uart
+	la a0, _page_table_start
+	ld a0, 0(a0)
+	wfi
 	.skip 4096
 
 .align 12
