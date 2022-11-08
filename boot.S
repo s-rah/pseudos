@@ -193,6 +193,7 @@ _start:
 .include "paging.S"
 .include "hex.S"
 .include "pci.S"
+.include "vga.S"
 
 # Test function to ensure that HARTs can co-exist. Each HART
 # will announce itself in turn and then give control to the next

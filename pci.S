@@ -77,7 +77,20 @@ _setup_pci:
 		or a4, a4, t3
 		bne a3, a4, _iterate_table_cont
 		addi a4, a0, 4
+
+		push a0
+		push a1
+		push t0
+		push t2
+		push t3
+		li a0, 0x30000000
+        add a0, t0, a0
 		jalr ra, a4
+		pop t3
+		pop t2
+		pop t0
+		pop a1
+		pop a0
 
 		_iterate_table_cont:
 		addi a1, a1, 1
@@ -112,9 +125,4 @@ _setup_qemu_pci_bridge:
 	pop ra
 	ret
 
-_setup_qemu_vga:
-	push ra
-	la a0, setup_qemu_vga
-	call _writeln
-	pop ra
-	ret
+
