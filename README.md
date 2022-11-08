@@ -18,7 +18,7 @@ You will also want to reference the virt.c implementation for qemu's risc-v emul
 
 # Running with a VGA graphics card (accessible via PCIe)
 
-`qemu-system-riscv64 -machine virt -cpu rv64 -smp 4 -m 8192M  -serial mon:stdio -device VGA -nographic -bios none -kernel kernel.elf`
+`qemu-system-riscv64 -machine virt -cpu rv64 -smp 4 -m 8192M  -serial mon:stdio -device VGA -bios none -kernel kernel.elf`
 
 # Compiling our bootloader
 
