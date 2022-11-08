@@ -10,6 +10,7 @@ welcome: .ascii  "Welcome to PseudOS\n\0"
 iamhart: .ascii  "I am HART \0"
 givingupcontrol: .ascii "Giving Up Control\0"
 newline: .ascii  "\n\0"
+tablespace: .ascii  "    \0"
 trapwarning: .ascii "WARNING!\0"
 twisset: .ascii "TW bit is set!\0"
 
@@ -25,6 +26,14 @@ write_uart_address: .ascii "Uart: \0"
 
 walkingpagetables: .ascii "Walking Page Tables...\0"
 endwalkingpagetables: .ascii "Walking Page Tables Complete\0"
+
+pcidevices: .ascii "PCI Devices\0"
+pcivendorid: .ascii "Vendor\0"
+pcideviceid: .ascii "Device\0"
+tableheader: .ascii "--------------------------------\0"
+
+setup_qemu_pci_bridge: .ascii "Identified QEMU PCI Bridge...\0"
+setup_qemu_vga: .ascii "Setting Up QEMU VGA...\0"
 
 hextable: .ascii  "0123456789ABCDEF"
 
@@ -45,8 +54,13 @@ _stacks:
 	.skip 8192,0
 
 .section .text.init
-.global _start
 
+# Inlcude all of our Paging Code...
+
+
+
+
+.global _start
 # Our kernel starts here...s
 _start:
 	# Setup a Stack for Hart 0-4
@@ -165,32 +179,63 @@ _start:
 	la a0, endwalkingpagetables
 	call _writeln
 
-	li t0, 0
-	_iterate_pci:
-	li a0, 0x30000000
-	add a0, a0, t0
-	ld a0, 0(a0)
-	push t0
-	call _print_hex
-	pop t0
-	li t1, 4096
-	add t0, t0, t1
-	li t1, 0x10000
-	bne t0,t1, _iterate_pci
-	#call _list_pci_devices
+	call _setup_pci
 
 	la t0, _example_page
 	csrw mepc,t0
 	mret
 
 	# Show off that we can announce ourselves
-	j _announce
+	#j _announce
 	wfi
 
-# Inlcude all of our Paging Code...
-.include "paging.S"
 .include "uart.S"
+.include "paging.S"
+.include "hex.S"
 .include "pci.S"
+
+# Test function to ensure that HARTs can co-exist. Each HART
+# will announce itself in turn and then give control to the next
+# HART
+# Eventually, we will use this to configure any HART specific
+# structures...
+_announce:
+	fence
+	la t0, _hartlock
+	lw t0, 0(t0)
+	csrr t1, mhartid
+	bne t0, t1, _announce
+
+	# Write I am HART...
+	la a0, iamhart
+	call _write_uart
+
+	# Add 0x30 to the HART ID to get ASCII Number
+	csrr t1, mhartid
+	li t2, 0x30
+	add t1, t2, t1
+	# Loading our Scratchpad RAM into a0
+	la a0, _scratchpad
+	# Store ASCII Hart ID into scratchpad
+	sb t1, 0(a0)
+	call _writeln
+
+	# Increment the HART lock
+	csrr t0, mhartid
+	li t1, 0x01
+	add t1, t0, t1
+	la t2, _hartlock
+	sw t1, 0(t2)
+
+	la t0, _hartlock
+	lw t1, 0(t0)
+
+	fence
+
+	wfi
+
+
+
 
 _supervisor_trap:
 	la a0, smode_trapwarning
@@ -315,45 +360,7 @@ _debug_misa:
 	pop ra
 	ret
 
-# Test function to ensure that HARTs can co-exist. Each HART
-# will announce itself in turn and then give control to the next
-# HART
-# Eventually, we will use this to configure any HART specific
-# structures...
-_announce:
-	fence
-	la t0, _hartlock
-	lw t0, 0(t0)
-	csrr t1, mhartid
-	bne t0, t1, _announce
 
-	# Write I am HART...
-	la a0, iamhart
-	call _write_uart
-
-	# Add 0x30 to the HART ID to get ASCII Number
-	csrr t1, mhartid
-	li t2, 0x30
-	add t1, t2, t1
-	# Loading our Scratchpad RAM into a0
-	la a0, _scratchpad
-	# Store ASCII Hart ID into scratchpad
-	sb t1, 0(a0)
-	call _writeln
-
-	# Increment the HART lock
-	csrr t0, mhartid
-	li t1, 0x01
-	add t1, t0, t1
-	la t2, _hartlock
-	sw t1, 0(t2)
-
-	la t0, _hartlock
-	lw t1, 0(t0)
-
-	fence
-
-	j _wait
 
 # Wait for interrupts (that will never come, because they are turned off)
 _wait:
@@ -398,6 +405,9 @@ _print_hex_loop:
 	call _write_uart
 	pop ra
 	ret
+
+
+
 
 # TODO: a0 = pages to alloc
 _kalloc:

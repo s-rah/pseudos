@@ -1,5 +1,4 @@
-.align 12
-#writeln is a function that will print out something followed
+# writeln is a function that will print out something followed
 # by a new line...
 # a0 should contain the address of a string to print
 # writeln will then write this string to the serial UART device
@@ -30,7 +29,6 @@ _write_uart_char:
 	pop ra
 	ret
 
-.align 12
 # Write a string to UART
 # a0 should contain a pointer to the string we want to print...
 _write_uart:
