@@ -4,11 +4,35 @@
 # writeln will then write this string to the serial UART device
 # followed by a newline
 _writeln:
+	push t0
+	push t1
+	push t2
+	push t3
+	push t4
+	push t5
+	push t6
+	push a0
+	push a1
+	push a2
+	push a3
+	push a4
 	push ra
 	call _write_uart
 	la a0, newline
 	call _write_uart
 	pop ra
+	pop a4
+	pop a3
+	pop a2
+	pop a1
+	pop a0
+	pop t6
+	pop t5
+	pop t4
+	pop t3
+	pop t2
+	pop t1
+	pop t0
 	ret
 
 # Ensure that UART is a good state accepting 8bit values..

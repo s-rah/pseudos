@@ -30,6 +30,18 @@ _setup_satp:
 # a1: Physical Page
 # a2: X/W/R Bits
 _map_to_virtual:
+	push t0
+	push t1
+	push t2
+	push t3
+	push t4
+	push t5
+	push t6
+	push a0
+	push a1
+	push a2
+	push a3
+	push a4
 	push ra
 
 
@@ -90,6 +102,7 @@ _map_to_virtual:
 	push a0
 	push a1
 	push a2
+	li a0, 1
 	call _kalloc
 	mv a4, a0
 	pop a2
@@ -138,6 +151,7 @@ _map_level_1:
 	push a0
 	push a1
 	push a2
+	li a0, 1
 	call _kalloc
 	mv a4, a0
 	pop a2
@@ -169,7 +183,20 @@ _map_level_0:
 	or a1, a1, a2
 	# Write to the physical address allocated by V1
 	sd a1, 0(a0)
+
 	pop ra
+	pop a4
+	pop a3
+	pop a2
+	pop a1
+	pop a0
+	pop t6
+	pop t5
+	pop t4
+	pop t3
+	pop t2
+	pop t1
+	pop t0
 	ret
 
 

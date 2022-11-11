@@ -37,6 +37,11 @@ setup_qemu_vga: .ascii "Setting Up QEMU VGA...\0"
 
 hextable: .ascii  "0123456789ABCDEF"
 
+valid_elf: .ascii "Valid ELF!\0"
+invalid_elf_warning: .ascii "Invalid ELF!\0"
+elf_program_headers: .ascii "ELF Program Headers:\0"
+elf_section_headers: .ascii "ELF Section Headers:\0"
+
 # We use co-operative scheduling for our HARTs, for now we
 # serialize them through this HART lock, later we will *only* use
 # this for access to shared resources.
@@ -52,6 +57,12 @@ _scratchpad:
 .align 12
 _stacks:
 	.skip 8192,0
+
+# Allocate some stack space..
+.align 12
+_user_stacks:
+	.skip 1024,0
+
 
 .section .text.init
 
@@ -114,13 +125,13 @@ _start:
 	# that they are the values we expect
 	call _sanity_check
 
-	call _setup_satp
+
 
 	#csrr a0, satp
 	#call _print_hex
 
-	#la a0, _example_page
-	#call _print_hex
+	la a0, _supervisor_trap
+	call _print_hex
 
 	# print out data page address
 	#la a0, data_section_address
@@ -141,14 +152,9 @@ _start:
 	# Identity Map Data
 	la a0, _data_start
 	la a1, _data_start
-	li a2, 0x07
+	li a2, 0x02
 	call _map_to_virtual
 
-	# Identity Map Data (F)
-	la a0, _stacks
-	la a1, _stacks
-	li a2, 0x0F
-	call _map_to_virtual
 
 	# Identity Map the Uart Ports
 	li a0, 0x10000000
@@ -163,10 +169,16 @@ _start:
 	call _map_to_virtual
 
 	# Virtual Map the Example Page (F)
-	la a0, _example_page
-	la a1, _example_page
-	li a2, 0x0F
-	call _map_to_virtual
+	#la a0, _example_page
+	#la a1, _example_page
+	#li a2, 0x0F
+	#call _map_to_virtual
+
+	call _setup_pci
+	call _setup_satp
+	la a0, _fbdoom
+	call _map_elf
+
 
 	la a0, walkingpagetables
 	call _writeln
@@ -179,11 +191,11 @@ _start:
 	la a0, endwalkingpagetables
 	call _writeln
 
-	call _setup_pci
+	wfi
 
-	la t0, _example_page
-	csrw mepc,t0
-	mret
+	#la a0, _example_page
+	#csrw mepc,a0
+	#mret
 
 	# Show off that we can announce ourselves
 	#j _announce
@@ -194,6 +206,7 @@ _start:
 .include "hex.S"
 .include "pci.S"
 .include "vga.S"
+.include "elf.S"
 
 # Test function to ensure that HARTs can co-exist. Each HART
 # will announce itself in turn and then give control to the next
@@ -252,7 +265,18 @@ _supervisor_trap:
 	call _writeln
 	wfi
 
+.align 12
+_machine_trap_stack:
+	.skip 8
+
 _machine_trap:
+	# restore stack pointer...
+	la a0, _machine_trap_stack
+	ld sp, 0(a0)
+
+	csrr a0, mepc
+	call _print_hex
+
 	la a0, trapwarning
 	call _write_uart
 
@@ -379,6 +403,18 @@ _supervisor_mode_entry:
 # given a0 = some 64 bit value, print it in hex
 # a1 = len?
 _print_hex:
+	push t0
+	push t1
+	push t2
+	push t3
+	push t4
+	push t5
+	push t6
+	push a0
+	push a1
+	push a2
+	push a3
+	push a4
 	push ra
 	# 64 bit value  = 8 bytes = 16 nibbles
 	li a1, 15
@@ -405,33 +441,55 @@ _print_hex_loop:
 	la a0, newline
 	call _write_uart
 	pop ra
+	pop a4
+	pop a3
+	pop a2
+	pop a1
+	pop a0
+	pop t6
+	pop t5
+	pop t4
+	pop t3
+	pop t2
+	pop t1
+	pop t0
 	ret
 
 
 
 
-# TODO: a0 = pages to alloc
+# a0 = pages to alloc
 _kalloc:
+	push a1
+	push t0
+	push t1
+	push t2
+	push ra
 	la a1, _heap_counter
 	ld t0, 0(a1)
 
-	li t1, 1
-	add t0, t0, t1
+	add t0, t0, a0
 	sd t0, 0(a1)
 
 	la t1, _heap_end
 	li t2, 4096
 	mul t2, t0, t2
 	sub a0, t1, t2
+	pop ra
+	pop t2
+	pop t1
+	pop t0
+	pop a1
 	ret
 
 
 .align 12
 _example_page:
 	la a0, supervisormodeentry
-	call _write_uart
-	la a0, _page_table_start
-	ld a0, 0(a0)
+	#call _write_uart
+	#la a0, _page_table_start
+	#ld a0, 0(a0)
+	ecall
 	wfi
 	.skip 4096
 
@@ -439,3 +497,7 @@ _example_page:
 _page_table_start:
 # Sv39 page tables contain 2^9 Page Table Entries
 	.skip 4096
+
+.align 12
+_fbdoom:
+.incbin "fbDOOM/fbdoom/fbdoom"
