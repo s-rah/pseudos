@@ -27,3 +27,6 @@ Compilation Step: `riscv64-unknown-elf-as boot.S -o boot.o`
 
 Linking Step: `riscv64-unknown-elf-ld -T kernel.lds boot.o -o kernel.elf`
 
+# Doom
+ 
+Doom with changes needed to make this compile/run can be found: https://github.com/s-rah/fbDOOM
