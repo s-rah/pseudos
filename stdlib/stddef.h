@@ -1,1 +1,1 @@
-typedef long size_t;
+typedef long long size_t;
