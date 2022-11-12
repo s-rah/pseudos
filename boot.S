@@ -37,6 +37,8 @@ setup_qemu_vga: .ascii "Setting Up QEMU VGA...\0"
 
 hextable: .ascii  "0123456789ABCDEF"
 
+mapping_v_addr: .ascii "Mapping VAddr\0"
+mapping_p_addr: .ascii "Mapping PAddr\0"
 valid_elf: .ascii "Valid ELF!\0"
 invalid_elf_warning: .ascii "Invalid ELF!\0"
 elf_program_headers: .ascii "ELF Program Headers:\0"
@@ -74,6 +76,10 @@ _user_stacks:
 .global _start
 # Our kernel starts here...s
 _start:
+
+
+
+
 	# Setup a Stack for Hart 0-4
 	csrr t0, mhartid
 	la t1, _stacks
@@ -88,6 +94,10 @@ _start:
 	call _setup_uart
 	la a0, welcome
 	call _write_uart
+
+
+	la a0,_doomwad
+	call _print_hex
 
 	# Dump MISA Extensions to Serial...
 	call _debug_misa
@@ -117,7 +127,7 @@ _start:
 	li t1, 0xFFFFFFFFFFFFE7FF
 	and t1, t0, t1
 	# Set MPP to Supervisor
-	li t2, 0x0800
+	li t2, 0x0800 | 1 << 13
 	or t1, t1, t2
 	csrw mstatus, t1
 
@@ -156,6 +166,24 @@ _start:
 	call _map_to_virtual
 
 
+	# Identity Map DOOM WAD File
+	li t0, 0x00
+	li t1, 11159840
+	srli t1, t1, 12
+	addi t1,t1,0x1
+
+	la s0, _doomwad
+	_map_wad:
+	mv a0, s0
+	mv a1, s0
+	li a2, 0x0F
+	call _map_to_virtual
+
+	li t2, 4096
+	addi t0, t0, 1
+	add s0, s0, t2
+	bne t0, t1, _map_wad
+
 	# Identity Map the Uart Ports
 	li a0, 0x10000000
 	li a1, 0x10000000
@@ -163,10 +191,10 @@ _start:
 	call _map_to_virtual
 
 	# Identity Map the Uart Functions  (F)
-	la a0, _write_uart
-	la a1, _write_uart
-	li a2, 0x0F
-	call _map_to_virtual
+	#la a0, _write_uart
+	#la a1, _write_uart
+	#li a2, 0x0F
+	#call _map_to_virtual
 
 	# Virtual Map the Example Page (F)
 	#la a0, _example_page
@@ -265,23 +293,121 @@ _supervisor_trap:
 	call _writeln
 	wfi
 
+_saved_reg:
+	.skip 8
+
 .align 12
 _machine_trap_stack:
 	.skip 8
 
+_user_trap_stack:
+	.skip 8
+
+_unrecoverable_error:
+	la a0, trapwarning
+	call _write_uart
+	wfi
+
+.align 12
 _machine_trap:
+	la a0, _user_trap_stack
+	sd sp, 0(a0)
+
 	# restore stack pointer...
 	la a0, _machine_trap_stack
 	ld sp, 0(a0)
 
-	csrr a0, mepc
-	call _print_hex
+	push s0
+	push s1
+	push s2
+	push s3
+	push s4
+	push s5
+	push s6
+	push s7
+	push s8
+	push s9
+	push s10
+	push s11
+		push a1
 
-	la a0, trapwarning
-	call _write_uart
+		mv a0, a5
+		call _print_hex
 
-	csrr a0, mcause
-	call _print_hex
+		csrr a0, mepc
+		call _print_hex
+
+		csrr a0, mcause
+			push a0
+			call _print_hex
+			pop a0
+		li t0, 0x9
+		bne a0, t0, _unrecoverable_error
+
+		pop a1
+	mv a0, a1
+		push a0
+		call _print_hex
+		pop a0
+
+	# Fake Malloc
+	# (a1 / 4096) + 1
+	srli a0, a0, 12
+	addi a0, a0, 1
+	mv s3, a0
+	call _kalloc
+		push a0
+		call _print_hex
+		pop a0
+
+	# Identity Map The Page into Virtual Address Space
+	# TODO...chage this...
+		push a0
+
+			li t0, 0x00
+			mv s2, a0
+			_map_malloc:
+			mv a0, s2
+			mv a1, s2
+			li a2, 0x0F
+			push s2
+			call _map_to_virtual
+			pop s2
+
+		li s4, 4096
+		add s2, s2, s4
+		add t0, t0, 0x01
+		bne t0, s3, _map_malloc
+
+		pop a0
+	la t0, _saved_reg
+	sd a0, 0(t0)
+
+	pop s11
+	pop s10
+	pop s9
+	pop s8
+	pop s7
+	pop s6
+	pop s5
+	pop s4
+	pop s3
+	pop s2
+	pop s1
+	pop s0
+
+	la a0, _user_trap_stack
+	ld sp, 0(a0)
+
+	la t0, _saved_reg
+	ld a0, 0(t0)
+
+	csrr t0, mepc
+	addi t0, t0, 0x04
+	csrw mepc, t0
+
+	mret
+
 	wfi
 
 
@@ -499,5 +625,10 @@ _page_table_start:
 	.skip 4096
 
 .align 12
+_doomwad:
+.incbin "DOOM.WAD"
+
+.align 12
 _fbdoom:
 .incbin "fbDOOM/fbdoom/fbdoom"
+

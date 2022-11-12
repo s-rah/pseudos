@@ -38,7 +38,7 @@ _map_elf:
 	call _print_hex
 	pop a0
 
-	li a2, 0x1
+	li a2, 0x0
 	addi a1, a0, 0x40
 
 	push a0
@@ -54,7 +54,8 @@ _next_program_header:
 	ld t5, 0x10(a1)
 	# t6 =  memsize
 	ld t6, 0x28(a1)
-
+	# t6 =  filesize
+	ld s6, 0x20(a1)
 
 
 	# t4 = file offset
@@ -111,10 +112,9 @@ _next_program_header:
 	add a3, s3, t5
 	lb a2, 0(a3)
 	add a3, s5, t5
-	add a3, a3, t4
 	sb a2, 0(a3)
 	addi t5, t5, 0x1
-	bne t5, t6, _copy_program_section
+	bne t5, s6, _copy_program_section
 
 	push a0
 	mv a0, a1
@@ -165,15 +165,45 @@ _next_program_header:
 
 	# Identity Map Stack
 	push a0
-	li a0, 0x40000
+	li a0, 0xD0000
 	la a1, _user_stacks
 	li a2, 0x0F
 	call _map_to_virtual
 	pop a0
 
+	push a0
+	li a0, 0x00000
+	la a1, _user_zero
+	li a2, 0x0F
+	call _map_to_virtual
+	pop a0
+
+	push a0
+	la a0, _vga_mmio
+	la a1, _vga_mmio
+	li a2, 0x0F
+	call _map_to_virtual
+	pop a0
+
+	push a0
+	li t0, 0
+	li s0, 0x0000000050000000
+	_map_frame_buffer:
+	mv a0, s0
+	mv a1, s0
+	li a2, 0x0F
+	call _map_to_virtual
+
+	li t1, 4096
+	add s0, s0, t1
+	li t1, 19
+	addi t0, t0, 1
+	bne t0, t1, _map_frame_buffer
+	pop a0
+
 	la a1, _machine_trap_stack
 	sd sp, 0(a1)
-	li sp, 0x40000
+	li sp, 0xD1000
 
 	#li t0, 0x0000000087FA27F8
 	ld t0, 0x18(a0)
@@ -183,3 +213,7 @@ _next_program_header:
 	_end_map_elf:
 	pop ra
 	ret
+
+.align 12
+_user_zero:
+	.skip 65536

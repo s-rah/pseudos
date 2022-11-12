@@ -42,13 +42,30 @@ _map_to_virtual:
 	push a2
 	push a3
 	push a4
+	push a5
+	push a6
 	push ra
-
-
 
 	# Calculate the first PTE of the Virtual Address
 	# a0 contains the Virtual Address
 	# Virtual Address: VPN[2]-VPN[1]-VPN[0] (Offset)
+
+	#push a0
+	#la a0, mapping_v_addr
+	#call _write_uart
+	#pop a0
+	#push a0
+	#call _print_hex
+	#pop a0
+
+	#push a0
+	#la a0, mapping_p_addr
+	#call _write_uart
+	#pop a0
+	#push a0
+	#mv a0, a1
+	#call _print_hex
+	#pop a0
 
 	# Calculate the offset va.vpn[0] * 8
 	srli t0, a0, 12
@@ -178,13 +195,16 @@ _map_level_0:
 	# because we assume we align pages to 4KB (at least for now)
 	# we can just shift this down by 2
 	# and we will have a valid PPN in the PTE format
-	srli a1, a1, 2
+	srli a1, a1, 12
+	slli a1, a1, 10
 	# OR PPN | Permission Bits
 	or a1, a1, a2
 	# Write to the physical address allocated by V1
 	sd a1, 0(a0)
 
 	pop ra
+	pop a6
+	pop a5
 	pop a4
 	pop a3
 	pop a2
