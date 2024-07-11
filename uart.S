@@ -68,8 +68,7 @@ _write_uart_loop:
 	lb t2, 0(a0)
 	beqz t2, _write_uart_end
 	sb t2, 0(t1)
-	li t2, 1
-	add a0,t2,a0
+	addi a0,1,a0
 	# loop until null...
 	j _write_uart_loop
 _write_uart_end:
